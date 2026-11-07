@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#FDFBF7">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>QuickMind</title>
+  <style>
+    :root {
+      --bg: #FDFBF7;
+      --primary: #4A6B5D;
+      --chip: #E4ECE8;
+      --text: #2C3E35;
+      --subtext: #6B7B73;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+    
+    header { padding: 24px 20px 12px; }
+    h1 { font-size: 26px; font-weight: 700; }
+    p.sub { font-size: 14px; color: var(--subtext); margin-top: 4px; }
+
+    .presets { display: flex; gap: 10px; padding: 8px 20px 16px; overflow-x: auto; scrollbar-width: none; }
+    .presets::-webkit-scrollbar { display: none; }
+    .chip { background: var(--chip); border: none; padding: 10px 16px; border-radius: 18px; font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; cursor: pointer; transition: transform 0.1s; }
+    .chip:active { transform: scale(0.95); }
+
+    #notes-list { flex: 1; overflow-y: auto; padding: 0 20px 100px; display: flex; flex-direction: column; gap: 10px; }
+    .card { background: #FFF; padding: 14px 16px; border-radius: 18px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); transition: opacity 0.2s; }
+    .card.done { background: #F1F3F2; box-shadow: none; opacity: 0.65; }
+    .card.done .note-text { text-decoration: line-through; color: #888; }
+    
+    .check-btn { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #B0B8B4; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+    .card.done .check-btn { background: var(--primary); border-color: var(--primary); color: white; }
+    
+    .note-content { flex: 1; cursor: pointer; }
+    .note-text { font-size: 16px; font-weight: 500; word-break: break-word; }
+    .note-meta { font-size: 12px; color: #888; margin-top: 3px; }
+    
+    .del-btn { background: none; border: none; font-size: 18px; color: #C8B8B8; cursor: pointer; padding: 6px; }
+
+    .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #FFF; padding: 12px 16px; border-radius: 24px 24px 0 0; box-shadow: 0 -4px 16px rgba(0,0,0,0.06); display: flex; gap: 10px; align-items: center; }
+    #note-input { flex: 1; padding: 14px 18px; border-radius: 24px; border: 1.5px solid #E0E0E0; font-size: 16px; outline: none; }
+    #note-input:focus { border-color: var(--primary); }
+    
+    .action-btn { width: 50px; height: 50px; border-radius: 50%; border: none; background: var(--primary); color: white; font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+    .action-btn.listening { background: #D9534F; animation: pulse 1s infinite; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1 id="greeting">Hello ✨</h1>
+    <p class="sub">Tap a quick reminder or speak your mind.</p>
+  </header>
+
+  <div class="presets">
+    <button class="chip" onclick="addNote('💧 Drink a glass of water', 'Water')">💧 Drink Water</button>
+    <button class="chip" onclick="addNote('🍽️ Have a meal / snack', 'Food')">🍽️ Have Food</button>
+    <button class="chip" onclick="addNote('🧹 Quick 5-min cleanup', 'Cleaning')">🧹 Clean Room</button>
+    <button class="chip" onclick="addNote('🛒 Buy groceries', 'Errand')">🛒 Groceries</button>
+  </div>
+
+  <div id="notes-list"></div>
+
+  <div class="bottom-bar">
+    <input type="text" id="note-input" placeholder="Dump a quick thought..." autocomplete="off">
+    <button id="main-btn" class="action-btn" onclick="handleAction()">🎙️</button>
+  </div>
+
+  <script>
+    const input = document.getElementById('note-input');
+    const mainBtn = document.getElementById('main-btn');
+    const list = document.getElementById('notes-list');
+    let notes = JSON.parse(localStorage.getItem('quickmind_notes') || '[]');
+
+    // Time-aware greeting
+    const hr = new Date().getHours();
+    document.getElementById('greeting').textContent =
+      hr < 12 ? "Good morning ☀️" : hr < 17 ? "Good afternoon 🌿" : hr < 21 ? "Good evening ✨" : "Rest easy 🌙";
+
+    // Switch button between Mic and Add (+)
+    input.addEventListener('input', () => {
+      mainBtn.textContent = input.value.trim() ? '➕' : '🎙️';
+    });
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && input.value.trim()) addNote(input.value.trim(), 'Thought');
+    });
+
+    function saveAndRender() {
+      localStorage.setItem('quickmind_notes', JSON.stringify(notes));
+      list.innerHTML = notes.map(n => `
+        <div class="card ${n.done ? 'done' : ''}">
+          <div class="check-btn" onclick="toggleNote(${n.id})">${n.done ? '✓' : ''}</div>
+          <div class="note-content" onclick="toggleNote(${n.id})">
+            <div class="note-text">${n.text}</div>
+            <div class="note-meta">${n.cat} • ${n.time}</div>
+          </div>
+          <button class="del-btn" onclick="deleteNote(${n.id})">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function addNote(text, cat = 'Thought') {
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      notes.unshift({ id: Date.now(), text, cat, time, done: false });
+      input.value = '';
+      mainBtn.textContent = '🎙️';
+      saveAndRender();
+    }
+
+    function toggleNote(id) {
+      notes = notes.map(n => n.id === id ? { ...n, done: !n.done } : n);
+      saveAndRender();
+    }
+
+    function deleteNote(id) {
+      notes = notes.filter(n => n.id !== id);
+      saveAndRender();
+    }
+
+    // Voice Recognition Setup
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+    if (recognition) {
+      recognition.lang = 'en-IN';
+      recognition.onstart = () => mainBtn.classList.add('listening');
+      recognition.onend = () => mainBtn.classList.remove('listening');
+      recognition.onresult = (e) => {
+        const transcript = e.results[0][0].transcript;
+        if (transcript) addNote(transcript, 'Voice Note');
+      };
+    }
+
+    function handleAction() {
+      if (input.value.trim()) {
+        addNote(input.value.trim(), 'Thought');
+      } else if (recognition) {
+        recognition.start();
+      } else {
+        alert("Voice input works best in Chrome on Android!");
+      }
+    }
+
+    saveAndRender();
+  </script>
+</body>
+</html>
